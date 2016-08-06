@@ -10,7 +10,17 @@
 	outline: 3px solid rgba(127,255,255,0.5);
 	border: 0px;
 	padding: 15px;    
-
+    display: inline-block;
     font-size: 24px;
     font-family: 'Open Sans', sans-serif;
+}
+
+.viewerMode.bottomScreen  {
+    font-size: 8px;
+    bottom:120px;
+    padding:2px;
+}
+
+ .hide.bottomScreen  {
+    display: none;
 }

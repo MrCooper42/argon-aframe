@@ -6,6 +6,8 @@ var loader = document.querySelector('#loader-wrapper');
 statusMsg.innerHTML = "loading argon and aframe...";
 
 var hudElem = document.querySelector("#lookattarget");
+var hudElem2 = hudElem.cloneNode( true );
+hudElem2.id = hudElem.id + "2";
 
 arScene.addEventListener('argon-initialized', function(evt) {
     statusMsg.innerHTML = "argon initialized, starting vuforia...";
@@ -17,14 +19,20 @@ arScene.addEventListener('argon-vuforia-dataset-loaded', function(evt) {
     statusMsg.innerHTML = "done";
     loader.classList.add('loaded');
 
-	hudElem.style.display = 'inline-block'; // start hidden
-    arScene.hud.appendChild(hudElem);
+	// hudElem.style.display = 'inline-block'; // start hidden
+    arScene.hud.appendChild(hudElem, hudElem2);
 
     arScene.addEventListener('referenceframe-statuschanged', function(evt) {
         if (evt.detail.found) {
-	        hudElem.style.display = 'none'; // hide when target seen
+            hudElem.classList.add("hide");
+            hudElem2.classList.add("hide");
+	        // hudElem.style.display = 'none'; // hide when target seen
+	        // hudElem2.style.display = 'none'; // hide when target seen
         } else {
-	        hudElem.style.display = 'inline-block'; // show when target lost
+            hudElem.classList.remove("hide");
+            hudElem2.classList.remove("hide");
+	        // hudElem.style.display = 'inline-block'; // show when target lost
+	        // hudElem2.style.display = 'inline-block'; // hide when target seen
         }
     });
 });
@@ -40,6 +48,15 @@ arScene.addEventListener('argon-vuforia-not-available', function(evt) {
 
     statusMsg.innerHTML = "done";
     loader.classList.add('loaded');
+});
+
+arScene.addEventListener('enter-vr', function (evt) {
+    hudElem.classList.add("viewerMode");
+    hudElem2.classList.add("viewerMode");
+});
+arScene.addEventListener('exit-vr', function (evt) {
+    hudElem.classList.remove("viewerMode");
+    hudElem2.classList.remove("viewerMode");
 });
 
 var scene = document.querySelector('#stuff');
