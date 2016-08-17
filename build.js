@@ -938,7 +938,8 @@ AFRAME.registerSystem('vuforia', {
 
             // try to initialize with our key
             argonApp.vuforia.init({
-                licenseKey: self.key
+                //licenseKey: self.key
+                encryptedLicenseData: self.key
             }).then(function(api) {
                 // worked! Save the API
                 self.api = api;
