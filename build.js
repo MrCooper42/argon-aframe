@@ -957,6 +957,13 @@ AFRAME.registerSystem('vuforia', {
                 sceneEl.emit('argon-vuforia-initialized', {
                     target: sceneEl
                 });                            
+            }).catch(function(err) {
+                console.log("vuforia failed to initialize: " + err.message);
+
+                sceneEl.emit('argon-vuforia-initialization-failed', {
+                    target: sceneEl,
+                    error: err
+                });                                            
             });
         });
     },
@@ -1057,6 +1064,13 @@ AFRAME.registerSystem('vuforia', {
                 self.sceneEl.emit('argon-vuforia-dataset-downloaded', {
                     target: dataset.component
                 });                            
+            }).catch(function(err) {
+                console.log("couldn't download dataset: " + err.message);
+
+                sceneEl.emit('argon-vuforia-dataset-download-failed', {
+                    target: sceneEl,
+                    error: err
+                });                                            
             });
         });
     },
@@ -1107,8 +1121,14 @@ AFRAME.registerSystem('vuforia', {
                 self.sceneEl.emit('argon-vuforia-dataset-loaded', {
                     target: dataset.component
                 });               
-                console.log("dataset " + name + " loaded, ready to go");
-                           
+                console.log("dataset " + name + " loaded, ready to go");         
+            }).catch(function(err) {
+                console.log("couldn't load dataset: " + err.message);
+
+                sceneEl.emit('argon-vuforia-dataset-load-failed', {
+                    target: sceneEl,
+                    error: err
+                });                                            
             });
         } else {
             if (dataset.active != active) {
