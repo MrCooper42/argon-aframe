@@ -1020,6 +1020,77 @@ AFRAME.registerComponent('desiredreality', {
         }
     }
 });
+
+/**
+ * based on https://github.com/Utopiah/aframe-triggerbox-component
+ * 
+ * Usage <a-entity radius=10 trigger="event: mytrigger" /> will make a 10 unit 
+ * trigger region around the entity that emits the event mytrigger_entered once 
+ * the camera moves in and event mytrigger_exited once the camera leaves it.
+ *
+ * It can also be used on other entity e.g. an enemy or a bonus.
+ *
+ * inspired by https://github.com/atomicguy/aframe-fence-component/
+ *
+ */
+AFRAME.registerComponent('trigger', {
+  multiple: true,
+  schema: {
+      radius: {default: 1},
+      event: {default: 'trigger'}
+  },
+  init: function() {
+      // we don't know yet where we are
+      this.teststateset = false;
+      this.laststateinthetrigger = false;
+      this.name = "";
+  },
+  update: function (oldData) {
+      this.radiusSquared = this.data.radius * this.data.radius;
+      this.name = this.id ? this.id : "";
+  },
+  tick: function() {
+      // gathering all the data
+      var data = this.data;
+      var thisradiusSquared = this.radiusSquared;
+      var triggereventname = data.event;
+      var laststateset = this.laststateset;
+      var laststateinthetrigger = this.laststateinthetrigger;
+      var camera = this.el.sceneEl.camera;
+
+      // camera might not be set immediately
+      if (!camera) { return; }
+
+      var cameraPosition = camera.position;
+      //var position = this.el.getComputedAttribute('position');
+      // we don't want the attribute value, we want the "real" value
+      var distanceSquared = this.el.object3D.position.distanceToSquared(cameraPosition);
+
+      if (distanceSquared <= thisradiusSquared) {
+      	// we are in
+        if (laststateset){
+	        // we were not before
+          if (!laststateinthetrigger) {
+            this.el.emit(triggereventname, {name: this.name, inside: true, distanceSquared: distanceSquared});
+          }
+        }
+        this.laststateinthetrigger = true;
+      } else {
+      	// we are out
+        if (laststateset){
+          if (laststateinthetrigger) {
+	          // we were not before
+            this.el.emit(triggereventname, {name: this.name, inside: false, distanceSquared: distanceSquared});
+          }
+        }
+        this.laststateinthetrigger = false;
+      }
+      this.laststateset = true;
+  },
+
+});
+
+
 },{}],7:[function(require,module,exports){
 var Cesium = Argon.Cesium;
 var Cartesian3 = Cesium.Cartesian3;
@@ -1045,7 +1116,6 @@ var degToRad = THREE.Math.degToRad;
  * ar.device.orientation, ar.device.geolocation, ar.device.display
  */
 AFRAME.registerComponent('referenceframe', {
- 
     schema: { 
         lla: { type: 'vec3'},
         parent: { default: "FIXED" },
@@ -1062,29 +1132,49 @@ AFRAME.registerComponent('referenceframe', {
 
         this.update = this.update.bind(this);
 
+        if (!el.sceneEl) {
+            console.warn('referenceFrame initialized but no sceneEl');
+            this.finishedInit = false;
+        } else {
+            this.finishedInit = true;
+        }
+
         // this component only works with an Argon Scene
-        if (!el.sceneEl.isArgon) {
-            throw new Error('referenceframe must be used on a child of a <ar-scene>.');
+        // (sometimes, el.sceneEl is undefined when we get here.  weird)
+        if (el.sceneEl && !el.sceneEl.isArgon) {
+            console.warn('referenceframe must be used on a child of a <ar-scene>.');
         }
 	   this.localRotationEuler = new THREE.Euler(0,0,0,'XYZ');
        this.localPosition = { x: 0, y: 0, z: 0 };
        this.localScale = { x: 1, y: 1, z: 1 };
        this.knownFrame = false;
         el.addEventListener('componentchanged', this.updateLocalTransform.bind(this));
-        el.sceneEl.addEventListener('argon-initialized', function() {
-              self.update(self.data);
-        });            
+
+        if (el.sceneEl) {
+            el.sceneEl.addEventListener('argon-initialized', function() {
+                self.update(self.data);
+            });            
+        }
+    },
+
+    checkFinished: function () {
+        if (!this.finishedInit) {
+            this.finishedInit = true;
+            this.update(this.data);
+        }
     },
 
     /** 
      * Update 
      */
     update: function (oldData) {
+        if (!this.el.sceneEl) { return; }
+
         var el = this.el;
         var argonApp = this.el.sceneEl.argonApp;
         var data = this.data;
 
-        var lp = el.getComputedAttribute('position');
+        var lp = el.getAttribute('position');
         if (lp) {
             this.localPosition.x = lp.x;
             this.localPosition.y = lp.y;
@@ -1095,7 +1185,7 @@ AFRAME.registerComponent('referenceframe', {
             this.localPosition.z = 0;
         }
 
-        var lo = el.getComputedAttribute('rotation');
+        var lo = el.getAttribute('rotation');
         if (lo) {
             this.localRotationEuler.x = degToRad(lo.x);
             this.localRotationEuler.y = degToRad(lo.y);
@@ -1106,7 +1196,7 @@ AFRAME.registerComponent('referenceframe', {
             this.localRotationEuler.z = 0;
         }
 
-        var ls = el.getComputedAttribute('scale');
+        var ls = el.getAttribute('scale');
         if (ls) {
             this.localScale.x = ls.x;
             this.localScale.y = ls.y;
@@ -1241,10 +1331,12 @@ AFRAME.registerComponent('referenceframe', {
   /**
    * update each time step.
    */
-  tick: function () {
+  tick: function () {      
       var m1 = new THREE.Matrix4();
 
       return function(t) {
+        this.checkFinished();
+
         var data = this.data;               // parameters
         var el = this.el;                   // entity
         var object3D = el.object3D;
@@ -1403,8 +1495,8 @@ AFRAME.registerElement('ar-scene', {
         this.argonRender = this.argonRender.bind(this);
         this.argonUpdate = this.argonUpdate.bind(this);
         this.initializeArgon = this.initializeArgon.bind(this);
-        this.setupRenderer = this.setupRenderer.bind(this);
-     //   this.rAFRenderFunc = this.rAFRenderFunc.bind(this);
+
+        this.setupRenderer();
 
         // var arCameraEl = this.arCameraEl = document.createElement('a-entity');
         // arCameraEl.setAttribute(AR_CAMERA_ATTR, '');
@@ -1413,9 +1505,52 @@ AFRAME.registerElement('ar-scene', {
 
         // run this whenever the document is loaded, which might be now
         document.DOMReady().then(this.initializeArgon);
-        //this.initializeArgon();
       },
       writable: true 
+    },
+
+    setupRenderer: {
+      value: function () {        
+        var antialias = this.getAttribute('antialias') === 'true';
+
+        if (THREE.CSS3DArgonRenderer) {
+          this.cssRenderer = new THREE.CSS3DArgonRenderer();
+        } else {
+          this.cssRenderer = null;
+        }
+        if (THREE.CSS3DArgonHUD) {
+          this.hud = new THREE.CSS3DArgonHUD();
+        } else {
+          this.hud = null;
+        }
+        this.renderer = new THREE.WebGLRenderer({
+            alpha: true,
+            antialias: antialias,
+            logarithmicDepthBuffer: true
+        });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+      },
+      writable: true
+    },
+
+    initializeArgon: {
+        value: function () {
+            // need to do this AFTER the DOM is initialized because 
+            // the argon div may not be created yet, which will pull these 
+            // elements out of the DOM, when they might be needed
+            this.argonApp.view.element.appendChild(this.renderer.domElement);
+            if (this.cssRenderer) {
+              this.argonApp.view.element.appendChild(this.cssRenderer.domElement);
+            }
+            if (this.hud) {
+              this.argonApp.view.element.appendChild(this.hud.domElement);
+            }
+
+            this.emit('argon-initialized', {
+                target: this.argonApp
+            });            
+        },
+        writable: true
     },
 
     /**
@@ -1424,7 +1559,7 @@ AFRAME.registerElement('ar-scene', {
      */
     attachedCallback: {
       value: function () {        
-        this.setupSystems();
+        this.initSystems();
         this.play();
       },
       writable: window.debug
@@ -1534,50 +1669,6 @@ AFRAME.registerElement('ar-scene', {
           removeEventListenern();
       }
     },
-
-    initializeArgon: {
-        value: function () {
-            this.setupRenderer();
-
-            this.emit('argon-initialized', {
-                target: this.argonApp
-            });            
-        },
-        writable: true
-    },
-
-    setupRenderer: {
-      value: function () {        
-        var antialias = this.getAttribute('antialias') === 'true';
-
-        if (THREE.CSS3DArgonRenderer) {
-          this.cssRenderer = new THREE.CSS3DArgonRenderer();
-        } else {
-          this.cssRenderer = null;
-        }
-        if (THREE.CSS3DArgonHUD) {
-          this.hud = new THREE.CSS3DArgonHUD();
-        } else {
-          this.hud = null;
-        }
-        this.renderer = new THREE.WebGLRenderer({
-            alpha: true,
-            antialias: antialias,
-            logarithmicDepthBuffer: true
-        });
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-
-        this.argonApp.view.element.appendChild(this.renderer.domElement);
-        if (this.cssRenderer) {
-          this.argonApp.view.element.appendChild(this.cssRenderer.domElement);
-        }
-        if (this.hud) {
-          this.argonApp.view.element.appendChild(this.hud.domElement);
-        }
-      },
-      writable: true
-    },
-
 
     /**
      * Reload the scene to the original DOM content.
@@ -1773,7 +1864,7 @@ AFRAME.registerElement('ar-scene', {
     /**
      * Some mundane functions below here
      */
-    setupSystems: {
+    initSystems: {
       value: function () {
         var systemsKeys = Object.keys(AFRAME.systems);
         systemsKeys.forEach(this.initSystem.bind(this));
@@ -1814,14 +1905,25 @@ AFRAME.registerElement('ar-scene', {
     },
 
     /**
-     * Wraps Entity.getComputedAttribute to take into account for systems.
-     * If system exists, then return system data rather than possible component data.
+     * `getAttribute` used to be `getDOMAttribute` and `getComputedAttribute` used to be
+     * what `getAttribute` is now. Now legacy code.
      */
     getComputedAttribute: {
       value: function (attr) {
+        warn('`getComputedAttribute` is deprecated. Use `getAttribute` instead.');
+        this.getAttribute(attr);
+      }
+    },
+
+    /**
+     * Wraps Entity.getDOMAttribute to take into account for systems.
+     * If system exists, then return system data rather than possible component data.
+     */
+    getDOMAttribute: {
+      value: function (attr) {
         var system = this.systems[attr];
         if (system) { return system.data; }
-        return AEntity.prototype.getComputedAttribute.call(this, attr);
+        return AEntity.prototype.getDOMAttribute.call(this, attr);
       }
     },
 
@@ -1852,6 +1954,7 @@ AFRAME.registerElement('ar-scene', {
         behaviors.splice(index, 1);
       }
     }
+
     
   })
 });
@@ -2373,8 +2476,9 @@ AFRAME.registerComponent('panorama', {
                 this.el.emit("showpanorama", {name: this.name});
             }
 
+            var self = this;
             session.closeEvent.addEventListener(function(){
-                this.panoRealitySession = undefined;
+                self.panoRealitySession = undefined;
             })
         }
     },
@@ -2382,19 +2486,20 @@ AFRAME.registerComponent('panorama', {
     showPanorama: function(evt) {
         if (evt.detail.name === this.name) { 
             this.active = true;
+            var self = this;
 
             if (this.panoRealitySession) {
                 this.panoRealitySession.request('edu.gatech.ael.panorama.showPanorama', this.showOptions).then(function(){
-                    console.log("showing panorama: " + this.name);
+                    console.log("showing panorama: " + self.name);
 
-                    this.el.emit('showpanorama-success', {
-                        name: this.name
+                    self.el.emit('showpanorama-success', {
+                        name: self.name
                     });     
                 }).catch(function(err) {
                     console.log("couldn't show panorama: " + err.message);
 
-                    this.el.emit('showpanorama-failed', {
-                        name: this.name,
+                    self.el.emit('showpanorama-failed', {
+                        name: self.name,
                         error: err
                     });     
                 });                     
